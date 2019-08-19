@@ -7,6 +7,8 @@ function makeGraphs(error, salaryData) { //here will be all our graphs. Here we 
 
     salaryData.forEach(function(d) { //by default, the salary column is read as text, we want it to be read as a number (integer)
         d.salary = parseInt(d.salary);
+        d.yrs_service = parseInt(d["yrs.service"]) //wrapping that in the square bracket and quotes rather than using the dot notation because years of service actually has a dot 
+        d.yrs_since_phd = parseInt(d["yrs.since.phd"])
     })
 
     show_discipline_selector(ndx);
@@ -17,6 +19,9 @@ function makeGraphs(error, salaryData) { //here will be all our graphs. Here we 
 
     show_average_salary(ndx);
     show_rank_distribution(ndx);
+
+    show_service_to_salary_correlation(ndx);
+    show_phd_to_salary_correlation(ndx)
 
 
 
@@ -36,7 +41,7 @@ function show_discipline_selector(ndx) {
 function show_percent_that_are_professors(ndx, gender, element) {
     var percentageThatAreProf = ndx.groupAll().reduce( //1st we calculate the % of professors
         function(p, v) {
-            if (v.sex === gender) {// we ensure that we are dealing with the same gender
+            if (v.sex === gender) { // we ensure that we are dealing with the same gender
                 p.count++;
                 if (v.rank === "Prof") { // only interesed in increasing the counter if the gender  is the same than sex
                     p.are_prof++;
@@ -59,9 +64,9 @@ function show_percent_that_are_professors(ndx, gender, element) {
     );
 
     dc.numberDisplay(element)
-        .formatNumber(d3.format(".2%"))//percentage to two decimal places
-        .valueAccessor(function(d) {//because of course we used a custom reducer so our values have a count part and an our prof part right now
-            if (d.count == 0) {// dont care about the %, it is just 0
+        .formatNumber(d3.format(".2%")) //percentage to two decimal places
+        .valueAccessor(function(d) { //because of course we used a custom reducer so our values have a count part and an our prof part right now
+            if (d.count == 0) { // dont care about the %, it is just 0
                 return 0;
             }
             else {
@@ -80,8 +85,8 @@ function show_gender_balance(ndx) {
 
     dc.barChart('#gender-balance')
         // dc.barChart("#gender-balance")
-        .width(400)
-        .height(300)
+        .width(350)
+        .height(250)
         .margins({ top: 10, right: 50, bottom: 30, left: 50 })
         .dimension(dim) // cual seran sus x
         .group(group) //cual seran sus y
@@ -94,7 +99,7 @@ function show_gender_balance(ndx) {
 
 }
 
-
+/*-----------------------------------------------------------------------------------------------------------BarChart*/
 function show_average_salary(ndx) {
     var dim = ndx.dimension(dc.pluck('sex')); //here we have the x's
 
@@ -131,8 +136,8 @@ function show_average_salary(ndx) {
 
     //and now we can make our barchart
     dc.barChart('#average-salary')
-        .width(400)
-        .height(300)
+        .width(350)
+        .height(250)
         .margins({ top: 10, right: 50, bottom: 30, left: 50 })
         .dimension(dim) // the dim we calculated ir at the beggining of this same function
         .group(averageSalaryByGender) // all the calculates that we had to do to get these values ...  :(
@@ -147,6 +152,7 @@ function show_average_salary(ndx) {
         .yAxis().ticks(5);
 }
 
+/*-----------------------------------------------------------------------------------------------------------BarChart*/
 function show_rank_distribution(ndx) {
 
     function rankByGender(dimension, rank) {
@@ -177,8 +183,8 @@ function show_rank_distribution(ndx) {
     var assocProfByGender = rankByGender(dim, "AssocProf");
 
     dc.barChart("#rank-distribution")
-        .width(400)
-        .height(300)
+        .width(350)
+        .height(250)
         .dimension(dim)
         .group(profByGender, "Prof")
         .stack(asstProfByGender, "Asst Prof") // use stack method to attacht the other 2 groups
@@ -193,6 +199,84 @@ function show_rank_distribution(ndx) {
         })
         .x(d3.scale.ordinal())
         .xUnits(dc.units.ordinal)
+
         .legend(dc.legend().x(320).y(20).itemHeight(15).gap(5)) // to tell us what is what
-        .margins({ top: 10, right: 100, bottom: 30, left: 30 });
+        .margins({ top: 10, right: 100, bottom: 30, left: 30 })
+        .xAxisLabel("Gender")
+        .yAxis().ticks(10);
+}
+
+/*-----------------------------------------------------------------------------------------------------------scatter plot*/
+function show_service_to_salary_correlation(ndx) {
+
+    var genderColors = d3.scale.ordinal()
+        .domain(["Female", "Male"])
+        .range(["pink", "blue"]);
+
+    var eDim = ndx.dimension(dc.pluck("yrs_service")); //the x's, we will need these to get the min and max amouont of servce's years
+    var experienceDim = ndx.dimension(function(d) { //returns an array with two parts; one being the year or years of service and the other being the salary and this is what allows us to plot the dots of the scatter plot at the right x and y coordinates
+        return [d.yrs_service, d.salary, d.rank, d.sex];
+    });
+    var experienceSalaryGroup = experienceDim.group();
+
+    var minExperience = eDim.bottom(1)[0].yrs_service; //to get the minimun. Check that you extract the min and max from eDim, the same of your dimension previously declared.
+    var maxExperience = eDim.top(1)[0].yrs_service; //to get the maximun
+
+    dc.scatterPlot("#service-salary")
+        .width(800)
+        .height(400)
+        .x(d3.scale.linear().domain([minExperience, maxExperience]))
+        .brushOn(false)
+        .symbolSize(8) //size of the dot
+        .clipPadding(10) //leaves room near the top so that if we have a plot that's right on the top there is actually room for it we'll then label our y-axis 
+        .xAxisLabel("Years Of Service")
+        .yAxisLabel("Salary")
+        .title(function(d) { //the title is going to be what will appear if you hover the mouse over a dot
+            return d.key[2] + " earned " + d.key[1];
+        })
+        .colorAccessor(function(d) { // decide which piece of data will choose for the colors
+            return d.key[3];
+        })
+        .colors(genderColors)
+        .dimension(experienceDim)
+        .group(experienceSalaryGroup)
+        .margins({ top: 10, right: 50, bottom: 75, left: 75 });
+}
+
+
+/*-----------------------------------------------------------------------------------------------------------Scatter Plot*/
+function show_phd_to_salary_correlation(ndx) {
+
+    var genderColors = d3.scale.ordinal()
+        .domain(["Female", "Male"])
+        .range(["pink", "blue"]);
+
+    var pDim = ndx.dimension(dc.pluck("yrs_since_phd"));
+    var phdDim = ndx.dimension(function(d) {
+        return [d.yrs_since_phd, d.salary, d.rank, d.sex];
+    });
+    var phdSalaryGroup = phdDim.group();
+
+    var minPhd = pDim.bottom(1)[0].yrs_since_phd;
+    var maxPhd = pDim.top(1)[0].yrs_since_phd;
+
+    dc.scatterPlot("#phd-salary")
+        .width(800)
+        .height(400)
+        .x(d3.scale.linear().domain([minPhd, maxPhd]))
+        .brushOn(false)
+        .symbolSize(8)
+        .clipPadding(10)
+        .xAxisLabel("Years Since PhD")
+        .yAxisLabel("Salary")
+        .title(function(d) {
+            return d.key[2] + " earned " + d.key[1];
+        })
+        .colorAccessor(function(d) {
+            return d.key[3];
+        })
+        .colors(genderColors)
+        .dimension(phdDim)
+        .group(phdSalaryGroup)
+        .margins({ top: 10, right: 50, bottom: 75, left: 75 });
 }
